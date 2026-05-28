@@ -1,116 +1,107 @@
 <!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PICO PARK - Host</title>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <style>
-      /* Estilos Generales */
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: radial-gradient(circle, #1a1a2e 0%, #16213e 100%);
-        color: #fff;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-      }
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>HOST PANTALLA PRINCIPAL</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin: 0; background: #000; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+    canvas { border: 2px solid #333; background: #111; }
+  </style>
+</head>
+<body>
 
-      /* Título Estilizado */
-      h1 {
-        margin: 0;
-        padding: 20px;
-        font-size: 3rem;
-        text-transform: uppercase;
-        letter-spacing: 5px;
-        text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
-        color: #00d2ff;
-      }
+<canvas id="c"></canvas>
 
-      /* Contenedor del QR */
-      #ui-overlay {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        padding: 15px;
-        border-radius: 15px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        z-index: 10;
-      }
+<script>
+const socket = io();
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-      #qrcode {
-        background: white;
-        padding: 10px;
-        border-radius: 10px;
-        display: inline-block;
-      }
+canvas.width = 1200;
+canvas.height = 600;
 
-      #qrcode img {
-        display: block;
-      }
+let gamePlayers = {};
+let lobbyPlayers = [];
+let currentStatus = "lobby";
 
-      p {
-        margin-top: 10px;
-        font-weight: bold;
-        font-size: 0.9rem;
-        color: #00d2ff;
-      }
+socket.on("lobbyUpdate", (data) => {
+  lobbyPlayers = data.players;
+});
 
-      /* Canvas del Juego */
-      canvas {
-        border: 4px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
-      }
+socket.on("gameStarted", () => {
+  currentStatus = "playing";
+});
 
-      /* Info de Jugadores */
-      #stats {
-        position: absolute;
-        bottom: 20px;
-        left: 20px;
-        font-size: 1.2rem;
-        background: rgba(0, 0, 0, 0.5);
-        padding: 10px 20px;
-        border-radius: 50px;
-        border-left: 5px solid #00d2ff;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>PICO PARK CLONE</h1>
+socket.on("gameState", (state) => {
+  gamePlayers = state.players;
+});
 
-    <div id="ui-overlay">
-      <div id="qrcode"></div>
-      <p>ESCANEÁ PARA JUGAR</p>
-      <div id="ip-display" style="font-size: 12px; opacity: 0.7"></div>
-    </div>
+function drawLobby() {
+  ctx.fillStyle = "#1a1a2e";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    <div id="stats">Jugadores conectados: <span id="player-count">0</span></div>
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 40px sans-serif";
+  ctx.fillText("PICO-LOBBY", 50, 80);
+  ctx.font = "20px sans-serif";
+  ctx.fillText("Esperando jugadores...", 50, 120);
 
-    <script src="game.js"></script>
+  lobbyPlayers.forEach((p, i) => {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(50, 180 + i * 60, 40, 40);
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px sans-serif";
+    ctx.fillText(p.name, 110, 210 + i * 60);
+  });
 
-    <script>
-      // Lógica para mostrar la IP en pantalla por si el QR falla
-      const socket = io();
-      socket.on("connect", () => {
-        console.log("Conectado al servidor");
-      });
+  // Botón Start interactivo en pantalla para el Host
+  ctx.fillStyle = "#2ecc71";
+  ctx.fillRect(500, 450, 200, 60);
+  ctx.fillStyle = "white";
+  ctx.font = "bold 24px sans-serif";
+  ctx.fillText("START GAME", 525, 488);
+}
 
-      // Actualizar contador de jugadores (opcional si tu server lo envía)
-      socket.on("updatePlayers", (players) => {
-        const count = Object.keys(players).length;
-        document.getElementById("player-count").innerText = count;
-      });
-    </script>
-  </body>
+// Click del Host en su propia pantalla
+canvas.addEventListener("click", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (currentStatus === "lobby" && x > 500 && x < 700 && y > 450 && y < 510) {
+    socket.emit("input", { key: "start", pressed: true });
+  }
+});
+
+function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (currentStatus === "lobby") {
+    drawLobby();
+  } else {
+    // Dibujar Escenario / Plataforma piso base
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, 560, 1200, 40); 
+
+    // Dibujar Jugadores Activos
+    for (let id in gamePlayers) {
+      let p = gamePlayers[id];
+      ctx.fillStyle = p.color;
+      // Centramos el dibujo del canvas restando mitad de ancho/alto (32x40)
+      ctx.fillRect(p.x - 16, p.y - 20, 32, 40);
+      
+      // Nombre arriba del cuadrado
+      ctx.fillStyle = "white";
+      ctx.font = "14px sans-serif";
+      ctx.fillText(p.name, p.x - 20, p.y - 28);
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
 </html>

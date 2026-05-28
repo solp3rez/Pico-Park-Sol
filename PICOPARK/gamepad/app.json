@@ -6,23 +6,20 @@
     "orientation": "portrait",
     "scheme": "gamepad",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "supportsTablet": true
     },
-
     "android": {
       "edgeToEdgeEnabled": true
     },
-
     "web": {
       "bundler": "metro"
     },
-
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font",
+      "expo-image"
     ],
-
     "experiments": {
       "typedRoutes": false
     }

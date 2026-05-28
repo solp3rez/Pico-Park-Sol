@@ -1,231 +1,153 @@
-import React, { useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Dimensions,
-  TouchableOpacity,
-  ActivityIndicator,
-} from "react-native";
-
-// CORREGIDO: Salimos de 'screens' (..) y entramos a 'hooks'
+import React from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useGameSocket } from "../hooks/useGameSocket";
 
-const { width: SW } = Dimensions.get("window");
+export default function GamepadScreen({ address, onDisconnect }) {
+  const { connected, player, sendInput } = useGameSocket(address);
 
-const LEFT_MAX = SW * 0.2;
-const RIGHT_MAX = SW * 0.42;
-const JUMP_MIN = SW * 0.58;
-
-type Zone = "left" | "right" | "jump";
-
-interface Props {
-  address: string;
-  onDisconnect: () => void;
-}
-
-export default function GamepadScreen({ address, onDisconnect }: Props) {
-  const { connected, player, sendInput, error } = useGameSocket(address);
-  const touchMap = useRef<Map<number, Zone>>(new Map());
-  const inputRef = useRef({ left: false, right: false, jump: false });
-  const [vis, setVis] = useState({ left: false, right: false, jump: false });
-
-  const fire = (key: Zone, pressed: boolean) => {
-    if (inputRef.current[key] === pressed) return;
-    inputRef.current[key] = pressed;
+  const send = (key, pressed = true) => {
     sendInput(key, pressed);
-    setVis((v) => ({ ...v, [key]: pressed }));
   };
-
-  const zoneOf = (x: number): Zone | null => {
-    if (x < LEFT_MAX) return "left";
-    if (x < RIGHT_MAX) return "right";
-    if (x > JUMP_MIN) return "jump";
-    return null;
-  };
-
-  const onTouchStart = (e: any) => {
-    for (const t of e.nativeEvent.changedTouches) {
-      const zone = zoneOf(t.pageX);
-      if (!zone) continue;
-      touchMap.current.set(t.identifier, zone);
-      fire(zone, true);
-    }
-  };
-
-  const onTouchEnd = (e: any) => {
-    const remaining = new Set(
-      (e.nativeEvent.touches as any[]).map((t) => t.identifier),
-    );
-    for (const t of e.nativeEvent.changedTouches) {
-      const zone = touchMap.current.get(t.identifier);
-      touchMap.current.delete(t.identifier);
-      if (!zone) continue;
-      const stillHeld = [...touchMap.current.entries()].some(
-        ([id, z]) => z === zone && remaining.has(id),
-      );
-      if (!stillHeld) fire(zone, false);
-    }
-  };
-
-  const playerColor = player?.color ?? "#888";
-
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorIcon}>⚠</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={onDisconnect}>
-          <Text style={styles.backBtnText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   return (
-    <View
-      style={[
-        styles.container,
-        connected && player ? { borderColor: playerColor, borderWidth: 3 } : {},
-      ]}
-    >
+    <View style={styles.container}>
+
+      {/* HEADER */}
       <View style={styles.header}>
-        <View
-          style={[
-            styles.led,
-            { backgroundColor: connected ? "#2ecc71" : "#e74c3c" },
-          ]}
-        />
-        <Text style={styles.statusText}>
-          {connected
-            ? player
-              ? `${player.name} · ${address}`
-              : "Conectado..."
-            : "Conectando..."}
+        <Text style={styles.status}>
+          {connected ? "🟢 Conectado" : "🟡 Conectando..."}
         </Text>
-        <TouchableOpacity onPress={onDisconnect} style={styles.disconnectBtn}>
-          <Text style={styles.disconnectText}>✕</Text>
+
+        <TouchableOpacity onPress={onDisconnect}>
+          <Text style={styles.exit}>✕</Text>
         </TouchableOpacity>
       </View>
 
-      <View
-        style={styles.touchArea}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
-      >
-        <View style={styles.dpad} pointerEvents="none">
-          <View style={[styles.dpadBtn, vis.left && styles.dpadPressed]}>
-            <Text style={styles.arrow}>◄</Text>
-          </View>
-          <View style={styles.dpadCenter} />
-          <View style={[styles.dpadBtn, vis.right && styles.dpadPressed]}>
-            <Text style={styles.arrow}>►</Text>
-          </View>
-        </View>
+      {/* PLAYER INFO */}
+      <View style={styles.playerBox}>
+        <Text style={styles.playerName}>
+          {player?.name || "Sin jugador"}
+        </Text>
+      </View>
 
-        <View style={styles.centerArea} pointerEvents="none">
-          {!connected && <ActivityIndicator color="#FFD700" size="large" />}
-          {connected && player && (
-            <>
-              <View
-                style={[styles.playerBadge, { backgroundColor: playerColor }]}
-              >
-                <Text style={styles.playerInitial}>{player.name[0]}</Text>
-              </View>
-              <Text style={[styles.playerName, { color: playerColor }]}>
-                {player.name}
-              </Text>
-            </>
-          )}
-        </View>
+      {/* CONTROLES VERTICALES */}
+      <View style={styles.controls}>
 
-        <View
-          style={[
-            styles.jumpBtn,
-            { backgroundColor: vis.jump ? playerColor : playerColor + "BB" },
-          ]}
-          pointerEvents="none"
+        {/* ARRIBA / SALTO (Corregido a In/Out para precisión física) */}
+        <TouchableOpacity
+          style={styles.jumpBtn}
+          onPressIn={() => send("jump", true)}
+          onPressOut={() => send("jump", false)}
         >
-          <Text style={styles.jumpLabel}>A</Text>
-          <Text style={styles.jumpSub}>SALTO</Text>
+          <Text style={styles.btnText}>⬆ SALTO</Text>
+        </TouchableOpacity>
+
+        {/* IZQUIERDA / DERECHA */}
+        <View style={styles.row}>
+
+          <TouchableOpacity
+            style={styles.sideBtn}
+            onPressIn={() => send("left", true)}
+            onPressOut={() => send("left", false)}
+          >
+            <Text style={styles.btnText}>◄</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.sideBtn}
+            onPressIn={() => send("right", true)}
+            onPressOut={() => send("right", false)}
+          >
+            <Text style={styles.btnText}>►</Text>
+          </TouchableOpacity>
+
         </View>
+
+        {/* 🔴 START BUTTON (Sincronizado con onPressIn/Out) */}
+        <TouchableOpacity
+          style={styles.startBtn}
+          onPressIn={() => send("start", true)}
+          onPressOut={() => send("start", false)}
+        >
+          <Text style={styles.startText}>START GAME</Text>
+        </TouchableOpacity>
+
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0d0d1a" },
-  errorContainer: {
+  container: {
     flex: 1,
     backgroundColor: "#0d0d1a",
-    justifyContent: "center",
+    paddingTop: 40,
     alignItems: "center",
-    padding: 32,
   },
-  errorIcon: { fontSize: 48, marginBottom: 16 },
-  errorText: {
-    color: "#e74c3c",
-    fontSize: 17,
-    textAlign: "center",
-    marginBottom: 28,
-  },
-  backBtn: { backgroundColor: "#2980b9", padding: 14, borderRadius: 10 },
-  backBtnText: { color: "white", fontWeight: "bold" },
   header: {
+    width: "100%",
     flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  led: { width: 12, height: 12, borderRadius: 6, marginRight: 10 },
-  statusText: { flex: 1, color: "#aaa", fontSize: 13 },
-  disconnectBtn: { paddingHorizontal: 10 },
-  disconnectText: { color: "#666", fontSize: 20 },
-  touchArea: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
   },
-  dpad: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dpadBtn: {
-    width: 72,
-    height: 72,
+  status: {
+    color: "white",
+    fontSize: 14,
+  },
+  exit: {
+    color: "#ff5555",
+    fontSize: 20,
+  },
+  playerBox: {
+    marginTop: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#444",
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
+  },
+  playerName: {
+    color: "white",
+    fontSize: 16,
+  },
+  controls: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 20,
   },
-  dpadPressed: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderColor: "white",
-  },
-  dpadCenter: { width: 20 },
-  arrow: { color: "white", fontSize: 30 },
-  centerArea: { alignItems: "center", minWidth: 80 },
-  playerBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playerInitial: { color: "white", fontSize: 24, fontWeight: "bold" },
-  playerName: { fontSize: 12, fontWeight: "bold", marginTop: 5 },
   jumpBtn: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: "center",
+    backgroundColor: "#f1c40f",
+    padding: 20,
+    borderRadius: 12,
+    width: 160,
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "white",
   },
-  jumpLabel: { color: "white", fontSize: 32, fontWeight: "bold" },
-  jumpSub: { color: "white", fontSize: 10 },
+  row: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  sideBtn: {
+    backgroundColor: "#2c3e50",
+    padding: 25,
+    borderRadius: 12,
+    width: 80,
+    alignItems: "center",
+  },
+  startBtn: {
+    marginTop: 30,
+    backgroundColor: "#e74c3c",
+    padding: 18,
+    borderRadius: 12,
+    width: 180,
+    alignItems: "center",
+  },
+  btnText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  startText: {
+    color: "white",
+    fontWeight: "bold",
+  },
 });
