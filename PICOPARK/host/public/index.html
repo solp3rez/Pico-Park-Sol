@@ -6,7 +6,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { margin: 0; background: #000; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
-    canvas { border: 2px solid #333; background: #111; }
+    canvas { border: 2px solid #333; background: #111; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
   </style>
 </head>
 <body>
@@ -25,77 +25,118 @@ let gamePlayers = {};
 let lobbyPlayers = [];
 let currentStatus = "lobby";
 
+// ESCUCHA DE EVENTOS DEL SERVIDOR
 socket.on("lobbyUpdate", (data) => {
-  lobbyPlayers = data.players;
+  lobbyPlayers = data.players || [];
 });
 
 socket.on("gameStarted", () => {
+  console.log("-> ¡El juego comenzó oficialmente!");
   currentStatus = "playing";
 });
 
 socket.on("gameState", (state) => {
-  gamePlayers = state.players;
+  gamePlayers = state.players || {};
 });
 
-function drawLobby() {
-  ctx.fillStyle = "#1a1a2e";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 40px sans-serif";
-  ctx.fillText("PICO-LOBBY", 50, 80);
-  ctx.font = "20px sans-serif";
-  ctx.fillText("Esperando jugadores...", 50, 120);
-
-  lobbyPlayers.forEach((p, i) => {
-    ctx.fillStyle = p.color;
-    ctx.fillRect(50, 180 + i * 60, 40, 40);
-    ctx.fillStyle = "#fff";
-    ctx.font = "24px sans-serif";
-    ctx.fillText(p.name, 110, 210 + i * 60);
-  });
-
-  // Botón Start interactivo en pantalla para el Host
-  ctx.fillStyle = "#2ecc71";
-  ctx.fillRect(500, 450, 200, 60);
-  ctx.fillStyle = "white";
-  ctx.font = "bold 24px sans-serif";
-  ctx.fillText("START GAME", 525, 488);
+// ACCIÓN PARA ENVIAR EL START AL SERVIDOR
+function sendStartSignal() {
+  if (lobbyPlayers.length < 1) {
+    alert("Se necesitan mínimo 1 jugador conectado");
+    return;
+  }
+  console.log("Mandando señal de inicio desde el Host...");
+  socket.emit("input", { key: "start", pressed: true });
 }
 
-// Click del Host en su propia pantalla
+// 1. Iniciar con Click del Mouse en el botón verde
 canvas.addEventListener("click", (e) => {
+  if (currentStatus !== "lobby") return;
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  if (currentStatus === "lobby" && x > 500 && x < 700 && y > 450 && y < 510) {
-    socket.emit("input", { key: "start", pressed: true });
+  // Detecta el rectángulo del botón START GAME (X: 450 a 750, Y: 450 a 530)
+  if (x >= 450 && x <= 750 && y >= 450 && y <= 530) {
+    sendStartSignal();
   }
 });
 
+// 2. Iniciar con el Teclado Físico (Barra Espaciadora o Enter)
+window.addEventListener("keydown", (e) => {
+  if (currentStatus === "lobby" && (e.code === "Space" || e.code === "Enter")) {
+    sendStartSignal();
+  }
+});
+
+// RENDERIZADO DEL LOBBY
+function drawLobby() {
+  ctx.fillStyle = "#0d0d1a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 40px Arial";
+  ctx.fillText("PICO PARK - REPARADO", 50, 70);
+
+  ctx.font = "24px Arial";
+  ctx.fillText("Esperando jugadores...", 50, 110);
+  ctx.fillText(`Jugadores en sala: ${lobbyPlayers.length}/4`, 50, 160);
+
+  // Mostrar avatares de los jugadores conectados en tiempo real
+  lobbyPlayers.forEach((player, index) => {
+    const y = 220 + index * 70;
+    ctx.fillStyle = player.color;
+    ctx.fillRect(50, y, 45, 45);
+
+    ctx.fillStyle = "white";
+    ctx.font = "24px Arial";
+    ctx.fillText(player.name, 120, y + 32);
+  });
+
+  // Botón START visual dinámico (Verde si hay alguien conectado)
+  ctx.fillStyle = lobbyPlayers.length >= 1 ? "#2ecc71" : "#555";
+  ctx.fillRect(450, 450, 300, 80);
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 28px Arial";
+  ctx.fillText("START GAME", 510, 498);
+
+  if (lobbyPlayers.length < 1) {
+    ctx.fillStyle = "#ff4444";
+    ctx.font = "18px Arial";
+    ctx.fillText("⚠️ Conectá el Gamepad en la otra pestaña para habilitar", 420, 560);
+  }
+}
+
+// RENDERIZADO DE LA PARTIDA JUGÁNDOSE
+function drawGame() {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Piso sólido
+  ctx.fillStyle = "#333";
+  ctx.fillRect(0, 560, 1200, 40);
+
+  // Renderizar a todos los jugadores activos procesados por Matter.js
+  for (let id in gamePlayers) {
+    const p = gamePlayers[id];
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 16, p.y - 20, 32, 40);
+
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText(p.name, p.x - 20, p.y - 28);
+  }
+}
+
+// BUCLE GENERAL DEL JUEGO (ANIMATION LOOP)
 function loop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (currentStatus === "lobby") {
     drawLobby();
   } else {
-    // Dibujar Escenario / Plataforma piso base
-    ctx.fillStyle = "#333";
-    ctx.fillRect(0, 560, 1200, 40); 
-
-    // Dibujar Jugadores Activos
-    for (let id in gamePlayers) {
-      let p = gamePlayers[id];
-      ctx.fillStyle = p.color;
-      // Centramos el dibujo del canvas restando mitad de ancho/alto (32x40)
-      ctx.fillRect(p.x - 16, p.y - 20, 32, 40);
-      
-      // Nombre arriba del cuadrado
-      ctx.fillStyle = "white";
-      ctx.font = "14px sans-serif";
-      ctx.fillText(p.name, p.x - 20, p.y - 28);
-    }
+    drawGame();
   }
 
   requestAnimationFrame(loop);

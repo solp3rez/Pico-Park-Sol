@@ -1,12 +1,18 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { useGameSocket } from "../hooks/useGameSocket";
 
-export default function GamepadScreen({ address, onDisconnect }) {
-  const { connected, player, sendInput } = useGameSocket(address);
+interface GamepadProps {
+  address: string;
+  connected: boolean;
+  player: any;
+  sendInput: (key: "left" | "right" | "jump" | "start", pressed: boolean) => void;
+  onDisconnect: () => void;
+}
 
-  const send = (key, pressed = true) => {
-    sendInput(key, pressed);
+export default function GamepadScreen({ address, connected, player, sendInput, onDisconnect }: GamepadProps) {
+
+  const send = (key: "left" | "right" | "jump" | "start", pressed = true) => {
+    sendInput?.(key, pressed);
   };
 
   return (
@@ -15,7 +21,7 @@ export default function GamepadScreen({ address, onDisconnect }) {
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.status}>
-          {connected ? "🟢 Conectado" : "🟡 Conectando..."}
+          {connected ? "🟢 Conectado exitosamente" : "🟡 Conectando..."}
         </Text>
 
         <TouchableOpacity onPress={onDisconnect}>
@@ -26,14 +32,14 @@ export default function GamepadScreen({ address, onDisconnect }) {
       {/* PLAYER INFO */}
       <View style={styles.playerBox}>
         <Text style={styles.playerName}>
-          {player?.name || "Sin jugador"}
+          Jugador: {player?.name || "Asignando slot..."}
         </Text>
       </View>
 
       {/* CONTROLES VERTICALES */}
       <View style={styles.controls}>
 
-        {/* ARRIBA / SALTO (Corregido a In/Out para precisión física) */}
+        {/* ARRIBA / SALTO */}
         <TouchableOpacity
           style={styles.jumpBtn}
           onPressIn={() => send("jump", true)}
@@ -44,7 +50,6 @@ export default function GamepadScreen({ address, onDisconnect }) {
 
         {/* IZQUIERDA / DERECHA */}
         <View style={styles.row}>
-
           <TouchableOpacity
             style={styles.sideBtn}
             onPressIn={() => send("left", true)}
@@ -60,10 +65,9 @@ export default function GamepadScreen({ address, onDisconnect }) {
           >
             <Text style={styles.btnText}>►</Text>
           </TouchableOpacity>
-
         </View>
 
-        {/* 🔴 START BUTTON (Sincronizado con onPressIn/Out) */}
+        {/* START BUTTON */}
         <TouchableOpacity
           style={styles.startBtn}
           onPressIn={() => send("start", true)}
@@ -91,8 +95,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   status: {
-    color: "white",
+    color: "#2ecc71",
     fontSize: 14,
+    fontWeight: "bold",
   },
   exit: {
     color: "#ff5555",

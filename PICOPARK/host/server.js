@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 const Matter = require("matter-js");
+const os = require("os"); 
 
 const { Engine, World, Bodies, Body } = Matter;
 
@@ -12,8 +13,25 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, "public")));
 
+app.get("/gamepad", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "gamepad.html"));
+});
+
 const PORT = 3000;
-const LOCAL_IP = "10.56.2.21";
+
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        if (!name.toLowerCase().includes("virtual") && !name.toLowerCase().includes("vbox")) {
+          return iface.address;
+        }
+      }
+    }
+  }
+  return "127.0.0.1";
+}
 
 const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12"];
 const NAMES = ["Rojo", "Azul", "Verde", "Amarillo"];
@@ -35,67 +53,61 @@ const LEVELS = {
 
 function makeBody(id, spawn) {
   return Bodies.rectangle(spawn.x, spawn.y, 32, 40, {
-    label: id,
-    inertia: Infinity // Evita que el personaje rote/se caiga de costado
+    inertia: Infinity,
+    restitution: 0,
+    friction: 0.002
   });
 }
 
 function initLevel() {
-  engine = Engine.create();
+  engine = Engine.create({ gravity: { y: 1 } });
   world = engine.world;
-  world.gravity.y = 1; // Gravedad para que puedan caer/saltar
 
   const lvl = LEVELS[currentLevel];
 
-  // Agregar plataformas físicas
   lvl.platforms.forEach(p => {
-    World.add(world, Bodies.rectangle(p.x, p.y, p.w, p.h, { isStatic: true }));
+    const b = Bodies.rectangle(p.x, p.y, p.w, p.h, { isStatic: true });
+    World.add(world, b);
   });
 
-  // Traspasar jugadores del lobby al juego activo
   players = {};
+  let index = 0;
   for (const id in lobbyPlayers) {
-    const lp = lobbyPlayers[id];
-    const body = makeBody(id, lvl.spawns[0]);
+    const spawn = lvl.spawns[index % lvl.spawns.length];
+    const body = makeBody(id, spawn);
     World.add(world, body);
 
     players[id] = {
-      ...lp,
       body,
+      color: lobbyPlayers[id].color,
+      name: lobbyPlayers[id].name,
       inputs: { left: false, right: false, jump: false }
     };
+    index++;
   }
 
-  lobbyPlayers = {}; // Limpiamos lobby
   gameStatus = "playing";
-  io.emit("gameStarted");
+  io.emit("gameStarted"); 
 }
 
-// LOOP DE FÍSICA Y SINK (60 FPS)
 setInterval(() => {
   if (gameStatus !== "playing") return;
 
   for (const id in players) {
     const p = players[id];
-    const b = p.body;
     let vx = 0;
-
     if (p.inputs.left) vx = -4;
     if (p.inputs.right) vx = 4;
-    
-    // Aplicar velocidad horizontal conservando la caída vertical
-    Body.setVelocity(b, { x: vx, y: b.velocity.y });
 
-    // Lógica básica de salto (solo si no está ya en el aire flotando a lo loco)
-    if (p.inputs.jump && Math.abs(b.velocity.y) < 0.01) {
-      Body.setVelocity(b, { x: b.velocity.x, y: -10 });
-      p.inputs.jump = false; // Reset inmediato para evitar doble salto infinito
+    Body.setVelocity(p.body, { x: vx, y: p.body.velocity.y });
+
+    if (p.inputs.jump && Math.abs(p.body.velocity.y) < 0.01) {
+      Body.setVelocity(p.body, { x: p.body.velocity.x, y: -10 });
     }
   }
 
   Engine.update(engine, 1000 / 60);
 
-  // Formateo limpio del estado para el Host
   const state = {};
   for (const id in players) {
     state[id] = {
@@ -110,6 +122,7 @@ setInterval(() => {
 }, 1000 / 60);
 
 io.on("connection", (socket) => {
+  console.log(`Nuevo dispositivo: ${socket.id}`);
   
   socket.on("joinAsPlayer", () => {
     const i = Object.keys(lobbyPlayers).length;
@@ -118,33 +131,35 @@ io.on("connection", (socket) => {
       name: NAMES[i % NAMES.length],
       color: COLORS[i % COLORS.length]
     };
+    
+    socket.emit("playerAssigned", lobbyPlayers[socket.id]);
     io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
   });
 
-  // Escucha el input del cel, si es "start" arranca el nivel
   socket.on("input", ({ key, pressed }) => {
-    if (key === "start" && gameStatus === "lobby") {
+    if (key === "start" && pressed && gameStatus === "lobby") {
+      console.log("-> ¡Inicio ejecutado!");
       initLevel();
       return;
     }
 
-    if (players[socket.id]) {
-      players[socket.id].inputs[key] = pressed;
+    const playerId = players[socket.id] ? socket.id : Object.keys(lobbyPlayers).find(id => id === socket.id);
+    if (playerId && players[playerId]) {
+      players[playerId].inputs[key] = pressed;
     }
   });
 
   socket.on("disconnect", () => {
-    if (lobbyPlayers[socket.id]) {
-      delete lobbyPlayers[socket.id];
-      io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
-    }
-    if (players[socket.id]) {
-      if (world && players[socket.id].body) World.remove(world, players[socket.id].body);
-      delete players[socket.id];
-    }
+    delete lobbyPlayers[socket.id];
+    delete players[socket.id];
+    io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
   });
 });
 
+const detectedIP = getLocalIP();
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Servidor listo http://${LOCAL_IP}:${PORT}`);
+  console.log(`\n======================================================`);
+  console.log(`🎮 ¡SERVIDOR CORRIENDO SIN INTERFERENCIAS!`);
+  console.log(`💻 Red local: ${detectedIP}`);
+  console.log(`======================================================\n`);
 });

@@ -12,7 +12,7 @@ interface GameSocket {
   connected: boolean;
   player: PlayerInfo | null;
   error: string | null;
-  sendInput: (key: "left" | "right" | "jump", pressed: boolean) => void;
+  sendInput: (key: "left" | "right" | "jump" | "start", pressed: boolean) => void;
 }
 
 export function useGameSocket(address: string): GameSocket {
@@ -25,75 +25,69 @@ export function useGameSocket(address: string): GameSocket {
   useEffect(() => {
     if (!address) return;
 
-    const url = address.startsWith("http")
-      ? address
-      : `http://${address}`;
+    const url = address.startsWith("http") ? address : `http://${address}`;
 
     console.log("Conectando a:", url);
 
     const socket = io(url, {
       transports: ["websocket", "polling"],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 3, // Intentará 3 veces antes de fallar
       reconnectionDelay: 1000,
-      timeout: 10000,
+      timeout: 3500,           // 💡 Si en 3.5 segundos no responde, tira error
     });
 
     socketRef.current = socket;
 
     socket.on("connect", () => {
       console.log("CONECTADO");
-
       setConnected(true);
       setError(null);
-
       socket.emit("joinAsPlayer");
     });
 
     socket.on("playerAssigned", (info: PlayerInfo) => {
-      console.log("PLAYER:", info);
-
+      console.log("PLAYER ASSIGNED:", info);
       setPlayer(info);
     });
 
     socket.on("gameFull", () => {
-      setError(
-        "La sala está llena.\nIntentá más tarde."
-      );
-
+      setError("La sala está llena.\nIntentá más tarde.");
       socket.disconnect();
     });
 
     socket.on("disconnect", () => {
       console.log("DESCONECTADO");
-
       setConnected(false);
       setPlayer(null);
     });
 
     socket.on("connect_error", (err) => {
-      console.log("ERROR:", err.message);
-
+      console.log("ERROR DE CONEXIÓN:", err.message);
       setConnected(false);
-
+      setPlayer(null);
       setError(
-        `No se pudo conectar a:\n${address}\n\nVerificá:\n• misma red WiFi\n• servidor prendido\n• IP correcta`
+        `No se pudo conectar al Host.\n\nVerificá:\n• Misma red Wi-Fi en PC y Celular\n• El Firewall de Windows desactivado\n• Que la IP de la PC sea correcta`
       );
     });
 
     return () => {
+      socket.off("connect");
+      socket.off("playerAssigned");
+      socket.off("gameFull");
+      socket.off("disconnect");
+      socket.off("connect_error");
       socket.disconnect();
     };
   }, [address]);
 
-  const sendInput = (
-    key: "left" | "right" | "jump",
-    pressed: boolean
-  ) => {
-    socketRef.current?.emit("input", {
-      key,
-      pressed,
-    });
+  const sendInput = (key: "left" | "right" | "jump" | "start", pressed: boolean) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("input", {
+        key,
+        pressed,
+      });
+    }
   };
 
   return {

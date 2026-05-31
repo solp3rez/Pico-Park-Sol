@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Gamepad de Prueba - Pico Park</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding-top: 40px; margin: 0; }
+        .container { max-width: 400px; margin: 0 auto; padding: 20px; }
+        h1 { color: #f39c12; font-size: 24px; margin-bottom: 5px; }
+        #status { font-size: 14px; color: #bbb; margin-bottom: 30px; }
+        button { font-weight: bold; cursor: pointer; border-radius: 12px; border: none; user-select: none; transition: transform 0.1s; }
+        button:active { transform: scale(0.95); }
+        .btn-start { background: #e74c3c; color: white; width: 100%; height: 60px; font-size: 20px; margin-bottom: 40px; box-shadow: 0 4px #c0392b; }
+        .btn-start:active { box-shadow: 0 0px #c0392b; }
+        .controls-row { display: flex; justify-content: space-between; gap: 15px; }
+        .btn-move { background: #3498db; color: white; flex: 1; height: 80px; font-size: 18px; box-shadow: 0 4px #2980b9; }
+        .btn-move:active { box-shadow: 0 0px #2980b9; }
+        .btn-jump { background: #9b59b6; color: white; flex: 1; height: 80px; font-size: 18px; box-shadow: 0 4px #8e44ad; }
+        .btn-jump:active { box-shadow: 0 0px #8e44ad; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Gamepad Virtual</h1>
+        <p id="status">Buscando servidor...</p>
+
+        <button class="btn-start" id="startBtn">INICIAR JUEGO</button>
+        
+        <div class="controls-row">
+            <button class="btn-move" id="leftBtn">◀ IZQ</button>
+            <button class="btn-jump" id="jumpBtn">▲ SALTO</button>
+            <button class="btn-move" id="rightBtn">DER ▶</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        socket.on('connect', () => {
+            document.getElementById('status').innerText = "✅ ¡Conectado como Control Activo!";
+            // Nos unimos como jugador real al backend de tu amigo
+            socket.emit('joinAsPlayer');
+        });
+
+        function sendInput(key, pressed) {
+            socket.emit('input', { key: key, pressed: pressed });
+        }
+
+        // CORRECCIÓN CLAVE: El botón Start ahora manda la orden que el server espera
+        document.getElementById('startBtn').addEventListener('click', () => {
+            console.log("Enviando señal oficial de inicio...");
+            socket.emit('startGame');
+        });
+
+        // Eventos para Movimientos normales
+        document.getElementById('leftBtn').addEventListener('mousedown', () => sendInput('left', true));
+        document.getElementById('leftBtn').addEventListener('mouseup', () => sendInput('left', false));
+        
+        document.getElementById('rightBtn').addEventListener('mousedown', () => sendInput('right', true));
+        document.getElementById('rightBtn').addEventListener('mouseup', () => sendInput('right', false));
+        
+        document.getElementById('jumpBtn').addEventListener('mousedown', () => sendInput('jump', true));
+        document.getElementById('jumpBtn').addEventListener('mouseup', () => sendInput('jump', false));
+
+        // Soporte para pantallas táctiles por las dudas
+        document.getElementById('leftBtn').addEventListener('touchstart', (e) => { e.preventDefault(); sendInput('left', true); });
+        document.getElementById('leftBtn').addEventListener('touchend', (e) => { e.preventDefault(); sendInput('left', false); });
+        document.getElementById('rightBtn').addEventListener('touchstart', (e) => { e.preventDefault(); sendInput('right', true); });
+        document.getElementById('rightBtn').addEventListener('touchend', (e) => { e.preventDefault(); sendInput('right', false); });
+        document.getElementById('jumpBtn').addEventListener('touchstart', (e) => { e.preventDefault(); sendInput('jump', true); });
+        document.getElementById('jumpBtn').addEventListener('touchend', (e) => { e.preventDefault(); sendInput('jump', false); });
+    </script>
+</body>
+</html>
