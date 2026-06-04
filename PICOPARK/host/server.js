@@ -61,7 +61,7 @@ const LEVELS = {
 function initLevel() {
   engine = Engine.create();
   world = engine.world;
-  engine.gravity.y = 1.5;
+  engine.gravity.y = 1.0;
 
   const lvl = LEVELS[currentLevel];
   
@@ -77,7 +77,7 @@ function initLevel() {
   Object.keys(lobbyPlayers).forEach((id, index) => {
     const x = 100 + index * 50;
     const y = 500;
-    const body = Bodies.rectangle(x, y, 32, 40, { inertia: Infinity, friction: 0.002 });
+    const body = Bodies.rectangle(x, y, 32, 40, { inertia: Infinity, friction: 0.2 });
     World.add(world, body);
     
     players[id] = {
@@ -101,8 +101,8 @@ setInterval(() => {
   for (let id in players) {
     const p = players[id];
     let vx = 0;
-    if (p.inputs.left) vx = -4;
-    if (p.inputs.right) vx = 4;
+    if (p.inputs.left) vx = -2.5;
+    if (p.inputs.right) vx = 2.5;
 
     Body.setVelocity(p.body, { x: vx, y: p.body.velocity.y });
 
