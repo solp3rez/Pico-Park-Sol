@@ -5,7 +5,7 @@
     <title>Gamepad de Prueba - Pico Park</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding-top: 40px; margin: 0; }
+        body { background: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding-top: 40px; margin: 0; user-select: none; }
         .container { max-width: 400px; margin: 0 auto; padding: 20px; }
         h1 { color: #f39c12; font-size: 24px; margin-bottom: 5px; }
         #status { font-size: 14px; color: #bbb; margin-bottom: 30px; }
@@ -22,7 +22,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Gamepad Virtual</h1>
+        <h1>🎮 Gamepad Virtual de Prueba</h1>
         <p id="status">Buscando servidor...</p>
 
         <button class="btn-start" id="startBtn">INICIAR JUEGO</button>
@@ -39,7 +39,6 @@
         
         socket.on('connect', () => {
             document.getElementById('status').innerText = "✅ ¡Conectado como Control Activo!";
-            // Nos unimos como jugador real al backend de tu amigo
             socket.emit('joinAsPlayer');
         });
 
@@ -47,23 +46,26 @@
             socket.emit('input', { key: key, pressed: pressed });
         }
 
-        // CORRECCIÓN CLAVE: El botón Start ahora manda la orden que el server espera
+        // Envía el comando de inicio oficial alineado con el server
         document.getElementById('startBtn').addEventListener('click', () => {
             console.log("Enviando señal oficial de inicio...");
             socket.emit('startGame');
         });
 
-        // Eventos para Movimientos normales
+        // Eventos para Mouse en Computadora
         document.getElementById('leftBtn').addEventListener('mousedown', () => sendInput('left', true));
         document.getElementById('leftBtn').addEventListener('mouseup', () => sendInput('left', false));
+        document.getElementById('leftBtn').addEventListener('mouseleave', () => sendInput('left', false));
         
         document.getElementById('rightBtn').addEventListener('mousedown', () => sendInput('right', true));
         document.getElementById('rightBtn').addEventListener('mouseup', () => sendInput('right', false));
+        document.getElementById('rightBtn').addEventListener('mouseleave', () => sendInput('right', false));
         
         document.getElementById('jumpBtn').addEventListener('mousedown', () => sendInput('jump', true));
         document.getElementById('jumpBtn').addEventListener('mouseup', () => sendInput('jump', false));
+        document.getElementById('jumpBtn').addEventListener('mouseleave', () => sendInput('jump', false));
 
-        // Soporte para pantallas táctiles por las dudas
+        // Soporte Táctil para Celulares (Navegador)
         document.getElementById('leftBtn').addEventListener('touchstart', (e) => { e.preventDefault(); sendInput('left', true); });
         document.getElementById('leftBtn').addEventListener('touchend', (e) => { e.preventDefault(); sendInput('left', false); });
         document.getElementById('rightBtn').addEventListener('touchstart', (e) => { e.preventDefault(); sendInput('right', true); });

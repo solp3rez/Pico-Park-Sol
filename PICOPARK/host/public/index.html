@@ -25,7 +25,18 @@ let gamePlayers = {};
 let lobbyPlayers = [];
 let currentStatus = "lobby";
 
-// ESCUCHA DE EVENTOS DEL SERVIDOR
+// Definimos la estructura visual estática basada en el Nivel 1 de tu server.js
+const LEVEL_VISUAL = {
+  platforms: [
+    { x: 600, y: 550, w: 1200, h: 20 },
+    { x: 300, y: 420, w: 200, h: 20 },
+    { x: 900, y: 420, w: 200, h: 20 },
+    { x: 600, y: 300, w: 300, h: 20 }
+  ],
+  door: { x: 1100, y: 500, w: 50, h: 70 },
+  key: { x: 600, y: 150, r: 12 }
+};
+
 socket.on("lobbyUpdate", (data) => {
   lobbyPlayers = data.players || [];
 });
@@ -39,50 +50,43 @@ socket.on("gameState", (state) => {
   gamePlayers = state.players || {};
 });
 
-// ACCIÓN PARA ENVIAR EL START AL SERVIDOR
 function sendStartSignal() {
   if (lobbyPlayers.length < 1) {
     alert("Se necesitan mínimo 1 jugador conectado");
     return;
   }
-  console.log("Mandando señal de inicio desde el Host...");
-  socket.emit("input", { key: "start", pressed: true });
+  socket.emit("startGame");
 }
 
-// 1. Iniciar con Click del Mouse en el botón verde
 canvas.addEventListener("click", (e) => {
   if (currentStatus !== "lobby") return;
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  // Detecta el rectángulo del botón START GAME (X: 450 a 750, Y: 450 a 530)
   if (x >= 450 && x <= 750 && y >= 450 && y <= 530) {
     sendStartSignal();
   }
 });
 
-// 2. Iniciar con el Teclado Físico (Barra Espaciadora o Enter)
 window.addEventListener("keydown", (e) => {
   if (currentStatus === "lobby" && (e.code === "Space" || e.code === "Enter")) {
     sendStartSignal();
   }
 });
 
-// RENDERIZADO DEL LOBBY
 function drawLobby() {
   ctx.fillStyle = "#0d0d1a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = "white";
   ctx.font = "bold 40px Arial";
-  ctx.fillText("PICO PARK - REPARADO", 50, 70);
+  ctx.fillText("PICO PARK - MULTIPLAYER", 50, 70);
 
   ctx.font = "24px Arial";
   ctx.fillText("Esperando jugadores...", 50, 110);
   ctx.fillText(`Jugadores en sala: ${lobbyPlayers.length}/4`, 50, 160);
 
-  // Mostrar avatares de los jugadores conectados en tiempo real
   lobbyPlayers.forEach((player, index) => {
     const y = 220 + index * 70;
     ctx.fillStyle = player.color;
@@ -93,7 +97,6 @@ function drawLobby() {
     ctx.fillText(player.name, 120, y + 32);
   });
 
-  // Botón START visual dinámico (Verde si hay alguien conectado)
   ctx.fillStyle = lobbyPlayers.length >= 1 ? "#2ecc71" : "#555";
   ctx.fillRect(450, 450, 300, 80);
 
@@ -104,32 +107,58 @@ function drawLobby() {
   if (lobbyPlayers.length < 1) {
     ctx.fillStyle = "#ff4444";
     ctx.font = "18px Arial";
-    ctx.fillText("⚠️ Conectá el Gamepad en la otra pestaña para habilitar", 420, 560);
+    ctx.fillText("⚠️ Conectá la App del Celu para habilitar el inicio", 380, 560);
   }
 }
 
-// RENDERIZADO DE LA PARTIDA JUGÁNDOSE
+// NUEVA FUNCIÓN CORREGIDA: Ahora dibuja los obstáculos reales de Matter.js
 function drawGame() {
-  ctx.fillStyle = "#111";
+  // Fondo de la partida
+  ctx.fillStyle = "#161623";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Piso sólido
-  ctx.fillStyle = "#333";
-  ctx.fillRect(0, 560, 1200, 40);
+  // 1. DIBUJAR LA PUERTA DE SALIDA (Marrón con marco dorado)
+  ctx.fillStyle = "#8e44ad";
+  ctx.fillRect(LEVEL_VISUAL.door.x - 25, LEVEL_VISUAL.door.y - 35, LEVEL_VISUAL.door.w, LEVEL_VISUAL.door.h);
+  ctx.strokeStyle = "#f1c40f";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(LEVEL_VISUAL.door.x - 25, LEVEL_VISUAL.door.y - 35, LEVEL_VISUAL.door.w, LEVEL_VISUAL.door.h);
 
-  // Renderizar a todos los jugadores activos procesados por Matter.js
+  // 2. DIBUJAR LA LLAVE FLOTANTE (Círculo Dorado)
+  ctx.beginPath();
+  ctx.arc(LEVEL_VISUAL.key.x, LEVEL_VISUAL.key.y, LEVEL_VISUAL.key.r, 0, 2 * Math.PI);
+  ctx.fillStyle = "#f1c40f";
+  ctx.fill();
+  ctx.closePath();
+
+  // 3. DIBUJAR LAS PLATAFORMAS FLOTANTES DE TU SERVER
+  ctx.fillStyle = "#4a5568";
+  LEVEL_VISUAL.platforms.forEach(p => {
+    // Matter.js posiciona desde el centro, por eso restamos la mitad del ancho/alto
+    ctx.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+  });
+
+  // 4. DIBUJAR A LOS JUGADORES (Los Gatitos)
   for (let id in gamePlayers) {
     const p = gamePlayers[id];
+    // Cuerpo del personaje
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x - 16, p.y - 20, 32, 40);
 
+    // Ojos de los gatitos para que tengan onda
     ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.fillText(p.name, p.x - 20, p.y - 28);
+    ctx.fillRect(p.x + 4, p.y - 12, 6, 6);
+    ctx.fillStyle = "black";
+    ctx.fillRect(p.x + 7, p.y - 10, 3, 3);
+
+    // Nombre del jugador arriba
+    ctx.fillStyle = "white";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name, p.x, p.y - 26);
   }
 }
 
-// BUCLE GENERAL DEL JUEGO (ANIMATION LOOP)
 function loop() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 

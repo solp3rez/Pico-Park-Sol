@@ -44,56 +44,61 @@ let currentLevel = 1;
 
 const LEVELS = {
   1: {
-    width: 1200,
-    height: 600,
-    platforms: [{ x: 600, y: 580, w: 1200, h: 40 }],
-    spawns: [{ x: 100, y: 520 }]
+    platforms: [
+      { x: 600, y: 550, w: 1200, h: 20, isStatic: true },
+      { x: 300, y: 420, w: 200, h: 20, isStatic: true },
+      { x: 900, y: 420, w: 200, h: 20, isStatic: true },
+      { x: 600, y: 300, w: 300, h: 20, isStatic: true }
+    ],
+    boxes: [
+      { x: 600, y: 200, w: 50, h: 50 }
+    ],
+    door: { x: 1100, y: 500 },
+    key: { x: 600, y: 150 }
   }
 };
 
-function makeBody(id, spawn) {
-  return Bodies.rectangle(spawn.x, spawn.y, 32, 40, {
-    inertia: Infinity,
-    restitution: 0,
-    friction: 0.002
-  });
-}
-
 function initLevel() {
-  engine = Engine.create({ gravity: { y: 1 } });
+  engine = Engine.create();
   world = engine.world;
+  engine.gravity.y = 1.5;
 
   const lvl = LEVELS[currentLevel];
-
+  
   lvl.platforms.forEach(p => {
-    const b = Bodies.rectangle(p.x, p.y, p.w, p.h, { isStatic: true });
-    World.add(world, b);
+    World.add(world, Bodies.rectangle(p.x, p.y, p.w, p.h, { isStatic: true }));
+  });
+
+  lvl.boxes.forEach(b => {
+    World.add(world, Bodies.rectangle(b.x, b.y, b.w, b.h, { density: 0.001 }));
   });
 
   players = {};
-  let index = 0;
-  for (const id in lobbyPlayers) {
-    const spawn = lvl.spawns[index % lvl.spawns.length];
-    const body = makeBody(id, spawn);
+  Object.keys(lobbyPlayers).forEach((id, index) => {
+    const x = 100 + index * 50;
+    const y = 500;
+    const body = Bodies.rectangle(x, y, 32, 40, { inertia: Infinity, friction: 0.002 });
     World.add(world, body);
-
+    
     players[id] = {
-      body,
-      color: lobbyPlayers[id].color,
+      id: id,
+      body: body,
       name: lobbyPlayers[id].name,
+      color: lobbyPlayers[id].color,
       inputs: { left: false, right: false, jump: false }
     };
-    index++;
-  }
+  });
 
   gameStatus = "playing";
-  io.emit("gameStarted"); 
+  io.emit("gameStarted");
 }
 
 setInterval(() => {
   if (gameStatus !== "playing") return;
 
-  for (const id in players) {
+  Engine.update(engine, 1000 / 60);
+
+  for (let id in players) {
     const p = players[id];
     let vx = 0;
     if (p.inputs.left) vx = -4;
@@ -102,14 +107,12 @@ setInterval(() => {
     Body.setVelocity(p.body, { x: vx, y: p.body.velocity.y });
 
     if (p.inputs.jump && Math.abs(p.body.velocity.y) < 0.01) {
-      Body.setVelocity(p.body, { x: p.body.velocity.x, y: -10 });
+      Body.setVelocity(p.body, { x: p.body.velocity.x, y: -12 });
     }
   }
 
-  Engine.update(engine, 1000 / 60);
-
-  const state = {};
-  for (const id in players) {
+  let state = {};
+  for (let id in players) {
     state[id] = {
       x: players[id].body.position.x,
       y: players[id].body.position.y,
@@ -122,7 +125,7 @@ setInterval(() => {
 }, 1000 / 60);
 
 io.on("connection", (socket) => {
-  console.log(`Nuevo dispositivo: ${socket.id}`);
+  console.log(`Nuevo dispositivo conectado: ${socket.id}`);
   
   socket.on("joinAsPlayer", () => {
     const i = Object.keys(lobbyPlayers).length;
@@ -134,11 +137,20 @@ io.on("connection", (socket) => {
     
     socket.emit("playerAssigned", lobbyPlayers[socket.id]);
     io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
+    console.log(`Jugador asignado en Lobby: ${lobbyPlayers[socket.id].name}`);
+  });
+
+  // CORRECCIÓN CLAVE: Escuchamos el inicio tanto en formato clásico como pro del celular
+  socket.on("startGame", () => {
+    if (gameStatus === "lobby") {
+      console.log("-> ¡Inicio ejecutado desde el Celular!");
+      initLevel();
+    }
   });
 
   socket.on("input", ({ key, pressed }) => {
     if (key === "start" && pressed && gameStatus === "lobby") {
-      console.log("-> ¡Inicio ejecutado!");
+      console.log("-> ¡Inicio ejecutado desde Botón Web!");
       initLevel();
       return;
     }
@@ -150,16 +162,20 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    console.log(`Dispositivo desconectado: ${socket.id}`);
     delete lobbyPlayers[socket.id];
     delete players[socket.id];
     io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
   });
 });
 
+// FORZAR MUESTRA DE URLS AL ARRANCAR
 const detectedIP = getLocalIP();
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`\n======================================================`);
-  console.log(`🎮 ¡SERVIDOR CORRIENDO SIN INTERFERENCIAS!`);
-  console.log(`💻 Red local: ${detectedIP}`);
-  console.log(`======================================================\n`);
+  console.log(`\n========================================`);
+  console.log(`🎮 ¡SERVIDOR DE PICO PARK ACTIVO! 🎮`);
+  console.log(`========================================`);
+  console.log(`👉 LOCAL COMPU: http://localhost:${PORT}`);
+  console.log(`👉 PARA EL CELU: http://${detectedIP}:${PORT}`);
+  console.log(`========================================\n`);
 });

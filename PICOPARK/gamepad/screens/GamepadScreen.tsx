@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Vibration } from "react-native";
 
 interface GamepadProps {
   address: string;
@@ -10,71 +10,98 @@ interface GamepadProps {
 }
 
 export default function GamepadScreen({ address, connected, player, sendInput, onDisconnect }: GamepadProps) {
+  const [startPressed, setStartPressed] = useState(false);
+  const playerColor = player?.color || "#e74c3c";
 
-  const send = (key: "left" | "right" | "jump" | "start", pressed = true) => {
+  // Manejo directo táctil ultra-rápido sin delays
+  const handlePress = (key: "left" | "right" | "jump" | "start", pressed: boolean) => {
     sendInput?.(key, pressed);
   };
 
   return (
     <View style={styles.container}>
-
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.status}>
-          {connected ? "🟢 Conectado exitosamente" : "🟡 Conectando..."}
+      
+      {/* BARRA SUPERIOR: Detalles de conexión */}
+      <View style={styles.topInfo}>
+        <Text style={[styles.status, { color: connected ? "#2ecc71" : "#f1c40f" }]}>
+          {connected ? "🟢 CONECTADO" : "🟡 RECONECTANDO..."}
         </Text>
-
-        <TouchableOpacity onPress={onDisconnect}>
-          <Text style={styles.exit}>✕</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* PLAYER INFO */}
-      <View style={styles.playerBox}>
         <Text style={styles.playerName}>
-          Jugador: {player?.name || "Asignando slot..."}
+          Gatito: <Text style={{ color: playerColor, fontWeight: "bold" }}>{player?.name || "..."}</Text>
         </Text>
+        <Text style={styles.exitLink} onPress={onDisconnect}>✕ Salir</Text>
       </View>
 
-      {/* CONTROLES VERTICALES */}
-      <View style={styles.controls}>
-
-        {/* ARRIBA / SALTO */}
-        <TouchableOpacity
-          style={styles.jumpBtn}
-          onPressIn={() => send("jump", true)}
-          onPressOut={() => send("jump", false)}
-        >
-          <Text style={styles.btnText}>⬆ SALTO</Text>
-        </TouchableOpacity>
-
-        {/* IZQUIERDA / DERECHA */}
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={styles.sideBtn}
-            onPressIn={() => send("left", true)}
-            onPressOut={() => send("left", false)}
+      {/* CUERPO DEL JOYSTICK DISTRIBUIDO */}
+      <View style={styles.joystickWrapper}>
+        
+        {/* LADO IZQUIERDO: Flechas de movimiento AGRANDADAS y BIEN SEPARADAS */}
+        <View style={styles.leftContainer}>
+          <View
+            style={styles.arrowBtn}
+            onTouchStart={() => handlePress("left", true)}
+            onTouchEnd={() => handlePress("left", false)}
+            onTouchCancel={() => handlePress("left", false)}
           >
-            <Text style={styles.btnText}>◄</Text>
-          </TouchableOpacity>
+            <Text style={styles.arrowText}>◄</Text>
+          </View>
 
-          <TouchableOpacity
-            style={styles.sideBtn}
-            onPressIn={() => send("right", true)}
-            onPressOut={() => send("right", false)}
+          <View
+            style={styles.arrowBtn}
+            onTouchStart={() => handlePress("right", true)}
+            onTouchEnd={() => handlePress("right", false)}
+            onTouchCancel={() => handlePress("right", false)}
           >
-            <Text style={styles.btnText}>►</Text>
-          </TouchableOpacity>
+            <Text style={styles.arrowText}>►</Text>
+          </View>
         </View>
 
-        {/* START BUTTON */}
-        <TouchableOpacity
-          style={styles.startBtn}
-          onPressIn={() => send("start", true)}
-          onPressOut={() => send("start", false)}
-        >
-          <Text style={styles.startText}>START GAME</Text>
-        </TouchableOpacity>
+        {/* CENTRO: Botón START GAME con efecto visual real de hundimiento */}
+        <View style={styles.centerContainer}>
+          <View
+            style={[
+              styles.startBtn,
+              { 
+                backgroundColor: startPressed ? "#1b1b2f" : "#e74c3c",
+                borderColor: startPressed ? "#2ecc71" : "rgba(255,255,255,0.2)",
+                transform: [{ scale: startPressed ? 0.95 : 1 }]
+              }
+            ]}
+            onTouchStart={() => {
+              Vibration.vibrate(40); // Hace vibrar el celu al tocarlo
+              setStartPressed(true);
+              handlePress("start", true);
+            }}
+            onTouchEnd={() => {
+              setStartPressed(false);
+              handlePress("start", false);
+            }}
+            onTouchCancel={() => {
+              setStartPressed(false);
+              handlePress("start", false);
+            }}
+          >
+            <Text style={[styles.startText, { color: startPressed ? "#2ecc71" : "white" }]}>
+              {startPressed ? "¡ENVIADO!" : "START GAME"}
+            </Text>
+          </View>
+        </View>
+
+        {/* LADO DERECHO: Botón de salto (A) GIGANTE */}
+        <View style={styles.rightContainer}>
+          <View
+            style={[styles.jumpCircle, { backgroundColor: playerColor }]}
+            onTouchStart={() => {
+              Vibration.vibrate(20);
+              handlePress("jump", true);
+            }}
+            onTouchEnd={() => handlePress("jump", false)}
+            onTouchCancel={() => handlePress("jump", false)}
+          >
+            <Text style={styles.jumpLabel}>A</Text>
+            <Text style={styles.jumpSub}>SALTO</Text>
+          </View>
+        </View>
 
       </View>
     </View>
@@ -85,74 +112,104 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0d0d1a",
-    paddingTop: 40,
-    alignItems: "center",
+    paddingHorizontal: 35, 
+    paddingVertical: 12,
+    justifyContent: "space-between",
   },
-  header: {
-    width: "100%",
+  topInfo: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    alignItems: "center",
+    width: "100%",
+    height: 35,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
   status: {
-    color: "#2ecc71",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  exit: {
-    color: "#ff5555",
-    fontSize: 20,
-  },
-  playerBox: {
-    marginTop: 20,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#444",
-    borderRadius: 10,
+    fontSize: 12,
+    fontFamily: "monospace",
   },
   playerName: {
     color: "white",
-    fontSize: 16,
+    fontSize: 13,
   },
-  controls: {
+  exitLink: {
+    color: "#ff5555",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  joystickWrapper: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-end", 
+    justifyContent: "space-between",
+    paddingBottom: 15,
+  },
+  leftContainer: {
+    flexDirection: "row",
+    gap: 40, // Espacio de 40 píxeles entre flechas para que no se pisen
+    alignItems: "flex-end",
+  },
+  centerContainer: {
     justifyContent: "center",
     alignItems: "center",
-    gap: 20,
+    paddingBottom: 15,
   },
-  jumpBtn: {
-    backgroundColor: "#f1c40f",
-    padding: 20,
-    borderRadius: 12,
-    width: 160,
+  rightContainer: {
+    justifyContent: "center",
+    alignItems: "flex-end",
+  },
+  arrowBtn: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    width: 90, // Botones de dirección agrandados
+    height: 85,
+    borderRadius: 22,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  row: {
-    flexDirection: "row",
-    gap: 20,
+  arrowText: {
+    color: "white",
+    fontSize: 32,
+    fontWeight: "bold",
   },
-  sideBtn: {
-    backgroundColor: "#2c3e50",
-    padding: 25,
-    borderRadius: 12,
-    width: 80,
+  jumpCircle: {
+    width: 110, // Botón de salto bien grande
+    height: 110,
+    borderRadius: 55,
+    justifyContent: "center",
     alignItems: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.4)",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  jumpLabel: {
+    color: "white",
+    fontSize: 38,
+    fontWeight: "bold",
+  },
+  jumpSub: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 9,
+    fontWeight: "bold",
+    letterSpacing: 0.5,
+    marginTop: -2,
   },
   startBtn: {
-    marginTop: 30,
-    backgroundColor: "#e74c3c",
-    padding: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
     borderRadius: 12,
-    width: 180,
-    alignItems: "center",
-  },
-  btnText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "bold",
+    borderWidth: 2,
+    elevation: 4,
   },
   startText: {
-    color: "white",
     fontWeight: "bold",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
 });
