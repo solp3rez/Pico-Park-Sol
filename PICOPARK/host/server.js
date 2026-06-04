@@ -41,6 +41,8 @@ let players = {};
 let lobbyPlayers = {};
 let gameStatus = "lobby";
 let currentLevel = 1;
+let isDoorOpen = false;
+let victorySelection = 0; // --- VARIABLE GLOBAL ---
 
 const LEVELS = {
   1: {
@@ -62,6 +64,15 @@ function initLevel() {
   engine = Engine.create();
   world = engine.world;
   engine.gravity.y = 1.0;
+  isDoorOpen = false;
+
+  const wallOptions = { isStatic: true };
+  World.add(world, [
+    Bodies.rectangle(600, -10, 1200, 20, wallOptions),
+    Bodies.rectangle(600, 610, 1200, 20, wallOptions),
+    Bodies.rectangle(-10, 300, 20, 600, wallOptions),
+    Bodies.rectangle(1210, 300, 20, 600, wallOptions)
+  ]);
 
   const lvl = LEVELS[currentLevel];
   
@@ -100,6 +111,27 @@ setInterval(() => {
 
   for (let id in players) {
     const p = players[id];
+
+    if (p.body.position.x < 20) Body.setPosition(p.body, { x: 20, y: p.body.position.y });
+    if (p.body.position.x > 1180) Body.setPosition(p.body, { x: 1180, y: p.body.position.y });
+    
+    // Protección contra caída al vacío
+    if (p.body.position.y > 700) {
+      Body.setPosition(p.body, { x: 100, y: 500 });
+    }
+
+    if (!isDoorOpen && Math.hypot(p.body.position.x - LEVELS[1].key.x, p.body.position.y - LEVELS[1].key.y) < 40) {
+      isDoorOpen = true;
+    }
+
+    // --- VICTORIA PROTEGIDA ---
+    if (gameStatus === "playing" && isDoorOpen && Math.hypot(p.body.position.x - LEVELS[1].door.x, p.body.position.y - LEVELS[1].door.y) < 80) {
+      gameStatus = "victory";
+      victorySelection = 0;
+      io.emit("gameStatusUpdate", "victory");
+      io.emit("updateVictorySelection", 0);
+    }
+
     let vx = 0;
     if (p.inputs.left) vx = -2.5;
     if (p.inputs.right) vx = 2.5;
@@ -121,12 +153,13 @@ setInterval(() => {
     };
   }
 
-  io.emit("gameState", { players: state });
+  io.emit("gameState", { players: state, doorOpen: isDoorOpen, coin: { x: LEVELS[1].key.x, y: LEVELS[1].key.y, visible: !isDoorOpen } });
 }, 1000 / 60);
 
 io.on("connection", (socket) => {
   console.log(`Nuevo dispositivo conectado: ${socket.id}`);
-  
+  socket.emit("updateVictorySelection", victorySelection); // --- SINCRONIZACIÓN AL CONECTAR ---
+
   socket.on("joinAsPlayer", () => {
     const i = Object.keys(lobbyPlayers).length;
     lobbyPlayers[socket.id] = {
@@ -140,16 +173,44 @@ io.on("connection", (socket) => {
     console.log(`Jugador asignado en Lobby: ${lobbyPlayers[socket.id].name}`);
   });
 
-  // CORRECCIÓN CLAVE: Escuchamos el inicio tanto en formato clásico como pro del celular
   socket.on("startGame", () => {
-    if (gameStatus === "lobby") {
+    if (gameStatus === "lobby" || gameStatus === "victory") {
       console.log("-> ¡Inicio ejecutado desde el Celular!");
       initLevel();
     }
   });
 
   socket.on("input", ({ key, pressed }) => {
-    if (key === "start" && pressed && gameStatus === "lobby") {
+    if (gameStatus === "victory" && pressed) {
+      if (key === "right" || key === "left") {
+        victorySelection = victorySelection === 0 ? 1 : 0;
+        io.emit("updateVictorySelection", victorySelection);
+      }
+      if (key === "jump") {
+        if (victorySelection === 0) {
+          initLevel();
+        } else { 
+          // Lógica de "HOME" limpia y profunda
+          gameStatus = "lobby";
+          players = {}; 
+          isDoorOpen = false;
+          victorySelection = 0; // --- CAMBIO 1 ---
+          
+          if (engine) {
+            World.clear(engine.world);
+            Engine.clear(engine);
+            engine = null;
+            world = null;
+          }
+          
+          io.emit("gameStatusUpdate", "lobby");
+          io.emit("lobbyUpdate", { players: Object.values(lobbyPlayers) });
+        }
+      }
+      return;
+    }
+
+    if (key === "start" && pressed && (gameStatus === "lobby" || gameStatus === "victory")) {
       console.log("-> ¡Inicio ejecutado desde Botón Web!");
       initLevel();
       return;
@@ -169,7 +230,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// FORZAR MUESTRA DE URLS AL ARRANCAR
 const detectedIP = getLocalIP();
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`\n========================================`);
