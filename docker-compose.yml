@@ -1,0 +1,35 @@
+services:
+  # Servidor del juego (host): http://10.56.31.39:3000
+  host:
+    container_name: pico-park-host
+    build:
+      context: ./PICOPARK/host
+      dockerfile_inline: |
+        FROM node:20-alpine
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install --omit=dev
+        COPY . .
+        EXPOSE 3000
+        CMD ["node", "server.js"]
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # Control (gamepad) con Expo: se abre con Expo Go
+  gamepad:
+    container_name: pico-park-gamepad
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./PICOPARK/gamepad:/app
+    environment:
+      - EXPO_NO_TELEMETRY=1
+      - CI=false
+      - REACT_NATIVE_PACKAGER_HOSTNAME=10.56.31.39
+    ports:
+      - "8081:8081"
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    command: sh -c "npm install && npx expo start --lan"

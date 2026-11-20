@@ -174,7 +174,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("startGame", () => {
-    if (gameStatus === "lobby" || gameStatus === "victory") {
+    if ((gameStatus === "lobby" || gameStatus === "victory") && Object.keys(lobbyPlayers).length >= 2) {
       console.log("-> ¡Inicio ejecutado desde el Celular!");
       initLevel();
     }
