@@ -1,0 +1,80 @@
+name: CI-CD Pico Park
+
+on:
+  push:
+    branches: [main]
+
+env:
+  OWNER: solp3rez
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: vars
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push host
+        uses: docker/build-push-action@v6
+        with:
+          context: ./PICOPARK/host
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/pico-park-host:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ env.OWNER }}/pico-park-host:latest
+
+      - name: Build y push gamepad
+        uses: docker/build-push-action@v6
+        with:
+          context: ./PICOPARK/gamepad
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/pico-park-gamepad:${{ steps.vars.outputs.tag }}
+            ghcr.io/${{ env.OWNER }}/pico-park-gamepad:latest
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Desplegar en la VM
+        env:
+          NEW_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -u
+          cd ~/pico-park-deploy
+          PREV=$(grep '^IMAGE_TAG=' .env 2>/dev/null | cut -d= -f2 || true)
+          echo "Anterior: ${PREV:-ninguna} -> Nueva: $NEW_TAG"
+
+          IMAGE_TAG=$NEW_TAG docker compose pull
+          echo "IMAGE_TAG=$NEW_TAG" > .env
+          docker compose up -d
+
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:3000/ > /dev/null; then ok=1; break; fi
+            sleep 3
+          done
+          docker compose ps
+
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::La verificación falló, haciendo rollback"
+            if [ -n "$PREV" ]; then
+              echo "IMAGE_TAG=$PREV" > .env
+              docker compose up -d
+            fi
+            exit 1
+          fi
+          echo "Despliegue OK: $NEW_TAG"
